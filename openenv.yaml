@@ -1,0 +1,140 @@
+name: customer-support-escalation
+version: "1.0.0"
+description: >
+  OpenEnv-compatible AI training environment for customer support escalation.
+  An RL agent interacts with realistic customer-service conversations, classifies
+  tickets, generates responses, and decides when to escalate issues to a manager.
+
+author: "AI Customer Support Team"
+license: MIT
+
+# ─── Environment ──────────────────────────────────────────────────────────────
+environment:
+  entry_point: "env.customer_support_env:CustomerSupportEnv"
+  observation_model: "env.models:Observation"
+  action_model: "env.models:Action"
+  reward_model: "env.models:RewardBreakdown"
+
+  action_space:
+    - name: classify_ticket
+      description: Assign the issue to billing, technical, or general category.
+      parameters:
+        category:
+          type: string
+          enum: [billing, technical, general]
+    - name: respond
+      description: Send a text response to the customer.
+      parameters:
+        text:
+          type: string
+    - name: ask_info
+      description: Request more information from the customer.
+      parameters:
+        text:
+          type: string
+    - name: escalate
+      description: Escalate the ticket to a senior agent or manager.
+
+  observation_space:
+    user_message:
+      type: string
+      description: Most recent customer message
+    conversation_history:
+      type: array
+      items: string
+      description: Full prior conversation context
+    user_emotion:
+      type: string
+      enum: [calm, neutral, angry]
+    ticket_status:
+      type: string
+      enum: [open, resolved, escalated]
+    ticket_category:
+      type: string
+      enum: [billing, technical, general, unclassified]
+    turn:
+      type: integer
+      description: Current turn number
+
+# ─── Reward Function ──────────────────────────────────────────────────────────
+reward:
+  dense: true
+  components:
+    correct_classification:
+      value: +0.3
+      description: Ticket classified into the correct category
+    relevant_response:
+      value: +0.4
+      description: Response contains relevant keywords for the situation
+    successful_resolution:
+      value: +0.2
+      description: Episode ends with ticket resolved or correctly escalated
+    wrong_escalation:
+      value: -0.3
+      description: Escalating when escalation was not warranted
+    increased_frustration:
+      value: -0.2
+      description: Customer emotion worsened due to a bad action
+    unnecessary_action:
+      value: -0.1
+      description: Redundant or irrelevant action taken
+
+# ─── Tasks ────────────────────────────────────────────────────────────────────
+tasks:
+  - id: easy_classify_ticket
+    difficulty: easy
+    entry_point: "tasks.easy_task:EasyTask"
+    description: >
+      Classify the customer's issue into the correct ticket category
+      (billing / technical / general) based on the opening message.
+    grader: "grader.grader:EasyGrader"
+    pass_threshold: 0.5
+    scenarios:
+      - easy_billing_01
+      - easy_technical_01
+      - easy_general_01
+
+  - id: medium_generate_response
+    difficulty: medium
+    entry_point: "tasks.medium_task:MediumTask"
+    description: >
+      Engage in a multi-turn conversation and produce helpful, relevant
+      responses that de-escalate the customer's concern.
+    grader: "grader.grader:MediumGrader"
+    pass_threshold: 0.4
+    scenarios:
+      - medium_billing_02
+      - medium_technical_02
+
+  - id: hard_multi_turn_escalation
+    difficulty: hard
+    entry_point: "tasks.hard_task:HardTask"
+    description: >
+      Conduct a full multi-turn support conversation, correctly classify
+      the issue, respond with empathy, and decide whether to escalate.
+    grader: "grader.grader:HardGrader"
+    pass_threshold: 0.5
+    scenarios:
+      - hard_escalation_01
+      - hard_technical_escalation_01
+
+# ─── Agent ────────────────────────────────────────────────────────────────────
+agent:
+  entry_point: "agent.hf_agent:build_agent"
+  model: "mistralai/Mistral-7B-Instruct-v0.2"
+  fallback: "agent.hf_agent:RuleBasedAgent"
+
+# ─── Runner ───────────────────────────────────────────────────────────────────
+runner:
+  entry_point: "run_agent:main"
+  command: "python run_agent.py"
+  command_hf: "python run_agent.py --use-hf --hf-token $HF_TOKEN"
+
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+dependencies:
+  python: ">=3.9"
+  packages:
+    - pydantic>=2.0
+    - transformers>=4.38.0
+    - torch>=2.0.0
+    - accelerate>=0.27.0
