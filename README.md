@@ -1,3 +1,12 @@
+---
+title: Meta
+emoji: 🚀
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # AI Customer Support Escalation — OpenEnv Agentic Environment
 
 An OpenEnv-compliant reinforcement learning and agentic execution environment designed for training and evaluating customer support AI agents. This project was developed for the **OpenEnv Meta Hackathon**.
