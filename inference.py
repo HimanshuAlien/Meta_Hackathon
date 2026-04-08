@@ -42,51 +42,57 @@ def clamp(v: Any) -> float:
         return 0.5
     return max(0.01, min(0.99, val))
 
-# ──────── Structured Logging ──────────────────────────────────────────────
-def log_start(task_id: str):
-    print("[START] " + json.dumps({'task_id': task_id}), flush=True)
+# ──────── Structured Logging via Monkey-Patching ─────────────────────────
+current_task_name = ""
+current_steps = 0
+current_rewards = []
 
-def log_step(step_idx: int, action: Any, observation: Any, reward: float):
+original_reset = CustomerSupportEnv.reset
+original_step = CustomerSupportEnv.step
+
+def format_action(a: Any) -> str:
     try:
-        a_dict = action.model_dump() if hasattr(action, "model_dump") else action
-        o_dict = observation.model_dump() if hasattr(observation, "model_dump") else observation
-        
-        log_data = {
-            'step': step_idx,
-            'action': a_dict,
-            'observation': o_dict,
-            'reward': clamp(reward)
-        }
-        print("[STEP] " + json.dumps(log_data), flush=True)
-    except Exception as e:
-        sys.stderr.write("[LOG_ERROR] Failed to log step: " + str(e) + "\n")
+        atype = a.action_type.value if hasattr(a.action_type, "value") else str(a.action_type)
+        if atype == "classify_ticket":
+            cat = a.category.value if hasattr(a.category, "value") else str(a.category)
+            return f"classify_ticket('{cat}')"
+        elif atype in ("respond", "ask_info"):
+            txt = str(a.text).replace('\n', ' ').replace('\r', '')
+            # Truncate text if too long to avoid huge lines, or keep it. We'll keep it.
+            return f"{atype}('{txt}')"
+        elif atype == "escalate":
+            return "escalate()"
+        return f"{atype}()"
+    except Exception:
+        return "action()"
 
-def log_end(score: float):
-    print("[END] " + json.dumps({'score': clamp(score)}), flush=True)
+def patched_reset(self, scenario_id=None):
+    global current_steps, current_rewards
+    current_steps = 0
+    current_rewards = []
+    print(f"[START] task={current_task_name} env=customer_support model={MODEL_NAME}", flush=True)
+    return original_reset(self, scenario_id=scenario_id)
 
-# ──────── Episode Runner ──────────────────────────────────────────────────
-def run_episode_logged(env: CustomerSupportEnv, agent_fn: Callable, scenario_id: str):
-    obs = env.reset(scenario_id=scenario_id)
-    if hasattr(agent_fn, "reset"):
-        agent_fn.reset()
+def patched_step(self, action):
+    global current_steps, current_rewards
+    obs, reward, done, info = original_step(self, action)
+    current_steps += 1
+    current_rewards.append(reward)
     
-    done = False
-    step = 0
-    cumulative = 0.0
-    
-    while not done:
-        action = agent_fn(obs)
-        obs, reward, done, info = env.step(action)
-        step += 1
-        cumulative += reward
-        
-        log_step(
-            step_idx=step,
-            action=action,
-            observation=obs,
-            reward=reward
-        )
-    return clamp(cumulative)
+    act_str = format_action(action)
+    d_str = "true" if done else "false"
+    print(f"[STEP] step={current_steps} action={act_str} reward={reward:.2f} done={d_str} error=null", flush=True)
+    return obs, reward, done, info
+
+CustomerSupportEnv.reset = patched_reset
+CustomerSupportEnv.step = patched_step
+
+def log_end(success: bool, steps: int, score: float, rewards: list):
+    r_str = ",".join([f"{r:.2f}" for r in rewards])
+    if not r_str: r_str = "0.00"
+    s_str = "true" if success else "false"
+    print(f"[END] success={s_str} steps={steps} score={score:.3f} rewards={r_str}", flush=True)
+
 
 # ──────── Task Runners ────────────────────────────────────────────────────
 def run_all_tasks():
@@ -96,43 +102,48 @@ def run_all_tasks():
     
     task_scores = {}
 
+    global current_task_name
+    
     # 1. Easy Task
-    log_start("easy_classify_ticket")
+    current_task_name = "easy_classify_ticket"
     easy_task = EasyTask()
     easy_grader = EasyGrader()
     easy_scores = []
     for sid, _ in EASY_SCENARIOS:
-        run_episode_logged(env, agent_fn, sid)
         result = easy_task.run(agent_fn, scenario_id=sid)
-        easy_scores.append(clamp(easy_grader.grade(result)))
+        score = clamp(easy_grader.grade(result))
+        easy_scores.append(score)
+        success = score >= easy_grader.PASS_THRESHOLD
+        log_end(success=success, steps=current_steps, score=score, rewards=current_rewards)
     easy_final = clamp(sum(easy_scores) / len(easy_scores) if easy_scores else 0.5)
-    log_end(easy_final)
     task_scores["Easy Task"] = easy_final
     
     # 2. Medium Task
-    log_start("medium_generate_response")
+    current_task_name = "medium_generate_response"
     medium_task = MediumTask()
     medium_grader = MediumGrader()
     medium_scores = []
     for sid in MEDIUM_SCENARIOS:
-        run_episode_logged(env, agent_fn, sid)
         result = medium_task.run(agent_fn, scenario_id=sid)
-        medium_scores.append(clamp(medium_grader.grade(result)))
+        score = clamp(medium_grader.grade(result))
+        medium_scores.append(score)
+        success = score >= medium_grader.PASS_THRESHOLD
+        log_end(success=success, steps=current_steps, score=score, rewards=current_rewards)
     medium_final = clamp(sum(medium_scores) / len(medium_scores) if medium_scores else 0.5)
-    log_end(medium_final)
     task_scores["Medium Task"] = medium_final
     
     # 3. Hard Task
-    log_start("hard_multi_turn_escalation")
+    current_task_name = "hard_multi_turn_escalation"
     hard_task = HardTask()
     hard_grader = HardGrader()
     hard_scores = []
     for sid in HARD_SCENARIOS:
-        run_episode_logged(env, agent_fn, sid)
         result = hard_task.run(agent_fn, scenario_id=sid)
-        hard_scores.append(clamp(hard_grader.grade(result)))
+        score = clamp(hard_grader.grade(result))
+        hard_scores.append(score)
+        success = score >= hard_grader.PASS_THRESHOLD
+        log_end(success=success, steps=current_steps, score=score, rewards=current_rewards)
     hard_final = clamp(sum(hard_scores) / len(hard_scores) if hard_scores else 0.5)
-    log_end(hard_final)
     task_scores["Hard Task"] = hard_final
 
     # ──────── Human-Readable Summary ─────
