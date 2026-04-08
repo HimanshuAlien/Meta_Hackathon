@@ -113,7 +113,7 @@ def run_baseline() -> dict:
     easy_scores = []
     for sid, _ in EASY_SCENARIOS:
         result = easy_task.run(agent_fn, scenario_id=sid)
-        easy_scores.append(easy_grader.grade(result).score)
+        easy_scores.append(easy_grader.grade(result))
     import math
     def clamp(v) -> float:
         try:
@@ -132,7 +132,7 @@ def run_baseline() -> dict:
     medium_scores = []
     for sid in MEDIUM_SCENARIOS:
         result = medium_task.run(agent_fn, scenario_id=sid)
-        medium_scores.append(medium_grader.grade(result).score)
+        medium_scores.append(medium_grader.grade(result))
     medium_final = clamp(sum(medium_scores) / len(medium_scores) if medium_scores else 0.5)
     
     # 3. Hard
@@ -141,7 +141,7 @@ def run_baseline() -> dict:
     hard_scores = []
     for sid in HARD_SCENARIOS:
         result = hard_task.run(agent_fn, scenario_id=sid)
-        hard_scores.append(hard_grader.grade(result).score)
+        hard_scores.append(hard_grader.grade(result))
     hard_final = clamp(sum(hard_scores) / len(hard_scores) if hard_scores else 0.5)
     
     overall = clamp((easy_final + medium_final + hard_final) / 3.0)

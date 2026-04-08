@@ -58,7 +58,7 @@ class EasyGrader:
 
     PASS_THRESHOLD = 0.5
 
-    def grade(self, result: EasyTaskResult) -> GradeReport:
+    def grade(self, result: EasyTaskResult) -> float:
         score = soft_clip(result.score)  # already 0.0 or 1.0 but enforce strict clipping
 
         if result.is_correct:
@@ -73,12 +73,7 @@ class EasyGrader:
                 f"Classification was wrong after {result.steps} step(s)."
             )
 
-        return GradeReport(
-            task_name="easy_classify_ticket",
-            score=score,
-            passed=score >= self.PASS_THRESHOLD,
-            commentary=commentary,
-        )
+        return score
 
 
 class MediumGrader:
@@ -89,7 +84,7 @@ class MediumGrader:
 
     PASS_THRESHOLD = 0.4
 
-    def grade(self, result: MediumTaskResult) -> GradeReport:
+    def grade(self, result: MediumTaskResult) -> float:
         score = soft_clip(result.score)
 
         resp_scores = result.response_rewards
@@ -108,12 +103,7 @@ class MediumGrader:
             f"{resp_detail}"
         )
 
-        return GradeReport(
-            task_name="medium_generate_response",
-            score=score,
-            passed=score >= self.PASS_THRESHOLD,
-            commentary=commentary,
-        )
+        return score
 
 
 class HardGrader:
@@ -128,7 +118,7 @@ class HardGrader:
 
     PASS_THRESHOLD = 0.5
 
-    def grade(self, result: HardTaskResult) -> GradeReport:
+    def grade(self, result: HardTaskResult) -> float:
         score = soft_clip(result.score)
 
         esc_decision = (
@@ -152,12 +142,7 @@ class HardGrader:
             f"Steps: {result.steps}"
         )
 
-        return GradeReport(
-            task_name="hard_multi_turn_escalation",
-            score=score,
-            passed=score >= self.PASS_THRESHOLD,
-            commentary=commentary,
-        )
+        return score
 
 
 def grade_all(
@@ -168,11 +153,11 @@ def grade_all(
     """Grade all tasks provided and return the mean score."""
     scores = []
     if easy_result is not None:
-        scores.append(EasyGrader().grade(easy_result).score)
+        scores.append(EasyGrader().grade(easy_result))
     if medium_result is not None:
-        scores.append(MediumGrader().grade(medium_result).score)
+        scores.append(MediumGrader().grade(medium_result))
     if hard_result is not None:
-        scores.append(HardGrader().grade(hard_result).score)
+        scores.append(HardGrader().grade(hard_result))
     if not scores:
         return 0.5
     return soft_clip(sum(scores) / len(scores))

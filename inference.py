@@ -104,7 +104,7 @@ def run_all_tasks():
     for sid, _ in EASY_SCENARIOS:
         run_episode_logged(env, agent_fn, sid)
         result = easy_task.run(agent_fn, scenario_id=sid)
-        easy_scores.append(clamp(easy_grader.grade(result).score))
+        easy_scores.append(clamp(easy_grader.grade(result)))
     easy_final = clamp(sum(easy_scores) / len(easy_scores) if easy_scores else 0.5)
     log_end(easy_final)
     task_scores["Easy Task"] = easy_final
@@ -117,7 +117,7 @@ def run_all_tasks():
     for sid in MEDIUM_SCENARIOS:
         run_episode_logged(env, agent_fn, sid)
         result = medium_task.run(agent_fn, scenario_id=sid)
-        medium_scores.append(clamp(medium_grader.grade(result).score))
+        medium_scores.append(clamp(medium_grader.grade(result)))
     medium_final = clamp(sum(medium_scores) / len(medium_scores) if medium_scores else 0.5)
     log_end(medium_final)
     task_scores["Medium Task"] = medium_final
@@ -130,7 +130,7 @@ def run_all_tasks():
     for sid in HARD_SCENARIOS:
         run_episode_logged(env, agent_fn, sid)
         result = hard_task.run(agent_fn, scenario_id=sid)
-        hard_scores.append(clamp(hard_grader.grade(result).score))
+        hard_scores.append(clamp(hard_grader.grade(result)))
     hard_final = clamp(sum(hard_scores) / len(hard_scores) if hard_scores else 0.5)
     log_end(hard_final)
     task_scores["Hard Task"] = hard_final
